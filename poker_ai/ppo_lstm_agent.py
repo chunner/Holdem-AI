@@ -3,6 +3,54 @@ from stable_baselines3.common.env_util import make_vec_env
 from poker_env import PokerEnv
 # from stable_baselines3.common.torch_layers import RecurrentActorCriticPolicy
 from stable_baselines3.common.vec_env import DummyVecEnv
+from stable_baselines3.common.callbacks import BaseCallback
+import logging
+import time
+import os
+
+# configure logging
+# logging.basicConfig(
+#     filename='train.log', 
+#     level=logging.INFO, 
+#     format='%(asctime)s - %(levelname)s - %(message)s'
+# )
+log_dir = './log'
+os.makedirs(log_dir, exist_ok=True)
+log_path = os.path.join(log_dir, 'train.log')
+with open(log_path, 'w') :
+    pass
+
+
+agent_logger = logging.getLogger("agent")
+agent_logger.setLevel(logging.INFO)
+fh = logging.FileHandler(log_path)
+fh.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
+agent_logger.addHandler(fh)
+
+class LogCallback(BaseCallback):
+    def __init__(self, total_steps, verbose=0):
+        super().__init__(verbose)
+        self.start_time = time.time()
+        self.total_steps = total_steps
+
+        self.episode_cnt = 0
+
+    def _on_step(self) -> bool:
+        reward = self.locals.get('rewards', [0])[0]
+        done = self.locals.get('dones', [False])[0]
+
+        if done and self.episode_cnt% 100 == 0:
+            elapsed_time = time.time() - self.start_time
+            percent = self.num_timesteps / self.total_steps * 100
+            agent_logger.info(f"Step: {self.num_timesteps}, Reward: {reward}, "
+                              f"Elapsed Time: {elapsed_time:.2f}s, "
+                              f"Progress: {percent:.2f}%")
+        if done:
+            self.episode_cnt += 1
+
+        return True
+
+
 
 env = DummyVecEnv([lambda: PokerEnv()])
 
@@ -14,5 +62,6 @@ model = PPO(
     learning_rate=3e-4,
     policy_kwargs=dict(net_arch=[128, 128])#, lstm_hidden_size=128)
 )
-model.learn(total_timesteps=1_000_000)
+log_callback = LogCallback(total_steps=1_000_000)
+model.learn(total_timesteps=1_000_000, callback=log_callback)
 model.save("ppo_lstm_poker")

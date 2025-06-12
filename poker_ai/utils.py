@@ -32,7 +32,6 @@ def get_action(data):
 def sendJson(request, jsonData):
     data = json.dumps(jsonData).encode()
     request.send(struct.pack('i', len(data)))
-    print(f'Sending JSON data: {data}')
     request.sendall(data)
 
 
