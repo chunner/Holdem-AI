@@ -1,13 +1,15 @@
 import numpy as np
 import gymnasium as gym
 from gymnasium import spaces
-from utils import get_card_coding, sendJson, recvJson, get_action
+from utils import get_card_coding, sendJson, recvJson, get_action, action_to_actionstr
 import socket
 import logging
 import os
+from stable_baselines3 import PPO
 
 NUM_PLAYERS = 2
 INIT_MONEY = 20000
+OPP_UPDATA_FREQ = 500 # episode  
 
 server_ip = "127.0.0.1"
 server_port = 8888
@@ -20,6 +22,8 @@ game_number = 2
 #     format='%(asctime)s - %(levelname)s - %(message)s'
 # )
 log_dir = './log'
+model_dir = './model'
+os.makedirs(log_dir, exist_ok=True)
 os.makedirs(log_dir, exist_ok=True)
 log_path = os.path.join(log_dir, 'poker_env.log')
 with open(log_path, 'w'):
@@ -47,12 +51,15 @@ class PokerEnv(gym.Env):
         self.train_data = None
         self.helper_data = None
         self.episode_cnt  = 0
+        self.helper_model = None
+        self.train_pos = None
 
     def reset(self, seed=None, option=None):
         """
         Reset the environment to the initial state.
         """
         super().reset(seed=seed)
+        env_logger.info(f'Resetting Poker Environment, episode:{self.episode_cnt}')
         if (self.train_client == None or self.train_client.fileno() == -1):
             self.connect_to_server()
         else:
@@ -60,7 +67,10 @@ class PokerEnv(gym.Env):
             sendJson(self.helper_client, {'info': 'ready', 'status': 'start'})
             self.train_data = recvJson(self.train_client)
             self.helper_data = recvJson(self.helper_client)
-
+        
+        if (self.episode_cnt % OPP_UPDATA_FREQ == 0):
+            env_logger.info('Updating opponent model...')
+            self.load_helper()
         obs = self._get_obs(self.train_data)
         return obs, {}
 
@@ -70,23 +80,38 @@ class PokerEnv(gym.Env):
         Args:
             action(int): The action to be executed. 0 - 4
         """
+        # helper client action
+        while self.helper_data['position'] == self.helper_data['action_position']:
+            self.train_pos = self.train_data['position']
+            self.helper_pos = self.helper_data['position']
+
+            action_str = self.helper_get_action(self.helper_data)
+            env_logger.info(f"Helper client action: {action_str}")
+            sendJson(self.helper_client, {'action': action_str, 'info': 'action'})
+
+            self.helper_data = recvJson(self.helper_client)
+            self.train_data = recvJson(self.train_client)
+            done = (self.train_data['info'] == 'result')
+            if (done):
+                env_logger.info('win money: {},\tyour card: {},\topp card: {},\t\tpublic card: {}'.format(
+                    self.train_data['players'][self.train_pos]['win_money'], 
+                    self.train_data['player_card'][self.train_pos],
+                    self.train_data['player_card'][1 - self.train_pos], 
+                    self.train_data['public_card']))
+                self.episode_cnt += 1
+                if (self.episode_cnt % game_number == 0):
+                    env_logger.info('Game Turn over, closing clients...')
+                    self.train_client.close()
+                    self.helper_client.close()
+                obs = self._get_obs(self.train_data)
+                reward = self._calculate_reward(self.train_data)
+                return obs, reward, done, False,{}
+
+        # train client action
         self.train_pos = self.train_data['position']
         self.helper_pos = self.helper_data['position']
-        # train client action
         if self.train_data['position'] == self.train_data['action_position']:
-            if action == 0:
-                action_str = 'fold'
-            elif action == 1:
-                action_str = 'check' if 'check' in self.train_data['legal_actions'] else 'call'
-            elif action == 2:
-                raise_size = min(self.train_data['raise_range'][0] * 1.5, self.train_data['raise_range'][1])
-                action_str = 'r' + str(int(raise_size))
-            elif action == 3:
-                raise_size = min(self.train_data['raise_range'][0] * 2, self.train_data['raise_range'][1])
-                action_str = 'r' + str(int(raise_size))
-            elif action == 4:
-                raise_size = self.train_data['players'][self.train_pos]['money_left']
-                action_str = 'r' + str(int(raise_size))
+            action_str = action_to_actionstr(action, self.train_data)
             env_logger.info(f"Train client action: {action_str}")
             sendJson(self.train_client, {'action': action_str, 'info': 'action'})
 
@@ -108,29 +133,7 @@ class PokerEnv(gym.Env):
                     self.helper_client.close()
             return obs, reward, done, False, {}
 
-        # helper client action
-        if self.helper_data['position'] == self.helper_data['action_position']:
-            action_str = get_action(self.helper_data)
-            env_logger.info(f"Helper client action: {action_str}")
-            sendJson(self.helper_client, {'action': action_str, 'info': 'action'})
 
-            self.helper_data = recvJson(self.helper_client)
-            self.train_data = recvJson(self.train_client)
-            obs = self._get_obs(self.train_data)
-            reward = self._calculate_reward(self.train_data)
-            done = (self.train_data['info'] == 'result')
-            if (done):
-                env_logger.info('win money: {},\tyour card: {},\topp card: {},\t\tpublic card: {}'.format(
-                    self.train_data['players'][self.train_pos]['win_money'], 
-                    self.train_data['player_card'][self.train_pos],
-                    self.train_data['player_card'][1 - self.train_pos], 
-                    self.train_data['public_card']))
-                self.episode_cnt += 1
-                if (self.episode_cnt % game_number == 0):
-                    env_logger.info('Game Turn over, closing clients...')
-                    self.train_client.close()
-                    self.helper_client.close()
-            return obs, reward, done, False,{}
             
 
 
@@ -189,3 +192,29 @@ class PokerEnv(gym.Env):
 
         self.train_data = recvJson(self.train_client)
         self.helper_data = recvJson(self.helper_client)
+
+    def load_helper(self):
+        """
+        Load the helper model for the environment.
+        """
+        import glob
+        import random
+        model_files = glob.glob(os.path.join(model_dir, 'ppo_lstm_poker_*.zip'))
+        if (model_files):
+            # latest_model = max(model_files, key=os.path.getctime)
+            latest_model = random.choice(model_files)
+            env_logger.info(f"Loading helper model from {latest_model}")
+            self.helper_model = PPO.load(latest_model, env=self)
+        else:
+            self.helper_model = None
+
+    def helper_get_action(self, state):
+        """
+        Get the action from the helper model.
+        """
+        if (self.helper_model is None):
+            return get_action(state)
+        else:
+            obs = self._get_obs(state)
+            action,_ = self.helper_model.predict(obs, deterministic=True)
+            return action_to_actionstr(action, state)

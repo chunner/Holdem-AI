@@ -43,3 +43,35 @@ def recvJson(request):
         data = data + request.recv(length - len(data)).decode()
     data = json.loads(data)
     return data
+
+def action_to_actionstr(action, state):
+    """
+    Args:
+        action (int): Action index (0: fold, 1: check/call, 2: raise small, 3: raise big, 4: all-in)
+        state (dict): Current game state containing legal actions and raise range
+    Returns:
+        str: Action string representation
+    """
+    if action == 0:
+        return 'fold'
+    elif action == 1:
+        return 'check' if 'check' in state['legal_actions'] else 'call'
+    elif action == 2:
+        if 'raise' not in state['legal_actions']:
+            return 'check' if 'check' in state['legal_actions'] else 'call'
+
+        raise_size = min(state['raise_range'][0] * 1.5, state['raise_range'][1])
+        return 'r' + str(int(raise_size))
+    elif action == 3:
+        if 'raise' not in state['legal_actions']:
+            return 'check' if 'check' in state['legal_actions'] else 'call'
+
+        raise_size = min(state['raise_range'][0] * 2, state['raise_range'][1])
+        return 'r' + str(int(raise_size))
+    elif action == 4:
+        if 'raise' not in state['legal_actions']:
+            return 'check' if 'check' in state['legal_actions'] else 'call'
+
+        raise_size = state['players'][state['position']]['money_left']
+        return 'r' + str(int(raise_size))
+
