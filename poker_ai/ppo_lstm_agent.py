@@ -9,6 +9,10 @@ import time
 import os
 import shutil
 
+import torch
+print(f"CUDA available: {torch.cuda.is_available()}")
+print(f"Device: {torch.cuda.get_device_name(0) if torch.cuda.is_available() else 'CPU'}")
+
 # configure logging
 # logging.basicConfig(
 #     filename='train.log', 
@@ -52,7 +56,7 @@ class LogCallback(BaseCallback):
                               f"Elapsed Time: {elapsed_time:.2f}s, "
                               f"Progress: {percent:.2f}%")
             # save model every 100 episodes
-            self.model.save(os.path.join(model_dir, f"ppo_lstm_poker_{self.episode_cnt}.zip"))
+            self.model.save(os.path.join(model_dir, f"ppo_poker_{self.episode_cnt}.zip"))
             agent_logger.info(f"Model saved at episode {self.episode_cnt}")
 
         if done:
@@ -70,8 +74,10 @@ model = PPO(
     n_steps=2048,
     batch_size=64,
     learning_rate=3e-4,
-    policy_kwargs=dict(net_arch=[128, 128])#, lstm_hidden_size=128)
+    policy_kwargs=dict(net_arch=[128, 128]), #, lstm_hidden_size=128)
+    verbose=1,
+    tensorboard_log=os.path.join(log_dir, 'tensorboard'),
 )
 log_callback = LogCallback(total_steps=1_000_000, model=model)
 model.learn(total_timesteps=1_000_000, callback=log_callback)
-model.save("ppo_lstm_poker")
+model.save(os.path.join(model_dir, "ppo_poker_final.zip"))
