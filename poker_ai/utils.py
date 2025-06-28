@@ -45,4 +45,46 @@ def recvJson(request):
     return data
 
 
-
+def action_to_actionstr(action, state):
+    """
+    Args:
+        action (int): Action index (0: fold, 1: check/call, 2: raise small, 3: raise big, 4: all-in)
+        state (dict): Current game state containing legal actions and raise range
+    Returns:
+        str: Action string representation
+    """
+    pos = state['position']
+    money_left = state['players'][pos]['money_left']
+    legal = state['legal_actions']
+    raise_range = state['raise_range']
+    # 默认值
+    action_type = action
+    amount = 0
+    if action == 0:
+        action_str = 'fold'
+    elif action == 1:
+        action_str = 'check' if 'check' in legal else 'call'
+    elif action == 2:
+        if 'raise' not in legal or money_left == 0:
+            action_type = 1
+            action_str = 'check' if 'check' in legal else 'call'
+        else:
+            amount = min(raise_range[0] * 1.5, raise_range[1])
+            action_str = 'r' + str(int(amount))
+    elif action == 3:
+        if 'raise' not in legal or money_left == 0:
+            action_type = 1
+            action_str = 'check' if 'check' in legal else 'call'
+        else:
+            amount = min(raise_range[0] * 2, raise_range[1])
+            action_str = 'r' + str(int(amount))
+    elif action == 4:
+        if 'raise' not in legal or money_left == 0:
+            action_type = 1
+            action_str = 'check' if 'check' in legal else 'call'
+        else:
+            amount = raise_range[1]
+            action_str = 'r' + str(int(amount))
+    else:
+        raise ValueError(f"Unknown action: {action}")
+    return action_str
