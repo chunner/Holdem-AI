@@ -11,20 +11,20 @@ game_number = int(sys.argv[3])          # 最大对局数量
 
 
 model_path = './poker_ai/model/ppo_poker_final.zip'
-from stable_baselines3 import PPO
+from sb3_contrib import RecurrentPPO
 from poker_ai.poker_env import PokerEnv
 from poker_ai.utils import action_to_actionstr
 
 print("Loading model from:", model_path)
-model  = PPO.load(model_path)
+model  = RecurrentPPO.load(model_path)
 print("Model loaded successfully.")
 env = PokerEnv()
 print("Environment initialized.")
 
-
+lstm_state = None
 def get_action(data):
     obs = env._get_obs(data)
-    action, _ = model.predict(obs, deterministic=True)
+    action, lstm_state = model.predict(obs, state=lstm_state, deterministic=True)
     return action_to_actionstr(action, data)
 
 
@@ -69,6 +69,7 @@ if __name__ == "__main__":
             print('win money: {},\tyour card: {},\topp card: {},\t\tpublic card: {}'.format(
                 data['players'][position]['win_money'], data['player_card'][position],
                 data['player_card'][1 - position], data['public_card']))
+            lstm_state = None
             sendJson(client, {'info': 'ready', 'status': 'start'})
         else:
             print(data)

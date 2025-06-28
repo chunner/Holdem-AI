@@ -1,6 +1,8 @@
 from stable_baselines3 import PPO
 from stable_baselines3.common.env_util import make_vec_env
-from poker_env import PokerEnv
+from sb3_contrib import RecurrentPPO
+from sb3_contrib.ppo_recurrent.policies import MlpLstmPolicy
+from poker_ai.poker_env import PokerEnv
 # from stable_baselines3.common.torch_layers import RecurrentActorCriticPolicy
 from stable_baselines3.common.vec_env import DummyVecEnv
 from stable_baselines3.common.callbacks import BaseCallback
@@ -68,13 +70,18 @@ class LogCallback(BaseCallback):
 
 env = DummyVecEnv([lambda: PokerEnv()])
 
-model = PPO(
-    policy="MlpPolicy",
+model = RecurrentPPO(
+    policy=MlpLstmPolicy,  # Use MLP with LSTM policy
     env=env,
     n_steps=2048,
     batch_size=64,
     learning_rate=3e-4,
-    policy_kwargs=dict(net_arch=[128, 128]), #, lstm_hidden_size=128)
+    policy_kwargs=dict(
+        net_arch=dict(pi=[128, 128], vf=[128, 128]),  # MLP architecture
+        lstm_hidden_size=128,  # LSTM hidden size
+        enable_critic_lstm=True,  # Enable critical state for LSTM
+        shared_lstm=False,
+    ),
     verbose=1,
     tensorboard_log=os.path.join(log_dir, 'tensorboard'),
 )

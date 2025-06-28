@@ -5,7 +5,7 @@ from poker_ai.utils import get_card_coding, sendJson, recvJson, get_action, acti
 import socket
 import logging
 import os
-from stable_baselines3 import PPO
+from sb3_contrib import RecurrentPPO
 
 NUM_PLAYERS = 2
 INIT_MONEY = 20000
@@ -57,6 +57,8 @@ class PokerEnv(gym.Env):
         self.episode_cnt  = 0
         self.helper_model = None
         self.train_pos = None
+
+        self.helper_lstm_state = None
 
     def reset(self, seed=None, option=None):
         """
@@ -222,7 +224,7 @@ class PokerEnv(gym.Env):
             # latest_model = max(model_files, key=os.path.getctime)
             latest_model = random.choice(model_files)
             env_logger.info(f"Loading helper model from {latest_model}")
-            self.helper_model = PPO.load(latest_model, env=self)
+            self.helper_model = RecurrentPPO.load(latest_model, env=self)
         else:
             self.helper_model = None
 
@@ -234,7 +236,7 @@ class PokerEnv(gym.Env):
             return get_action(state)
         else:
             obs = self._get_obs(state)
-            action,_ = self.helper_model.predict(obs, deterministic=True)
+            action, self.helper_lstm_state = self.helper_model.predict(obs, state=self.helper_lstm_state, deterministic=True)
             return action_to_actionstr(action, state)
 
     def record_history(self, action, amount, actor):
