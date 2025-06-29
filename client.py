@@ -10,7 +10,7 @@ name = sys.argv[2]                      # 当前程序的 AI 名字
 game_number = int(sys.argv[3])          # 最大对局数量
 
 
-model_path = './ppo_poker_final1.zip' if room_number == 2 else './poker_ai/model/ppo_poker_6_final.zip'
+model_path = './final_model/ppo_poker_final.zip' if room_number == 2 else './final_model/ppo_poker_6_final.zip'
 from sb3_contrib import RecurrentPPO
 from poker_ai.poker_env_local import PokerEnv
 from poker_ai.utils import action_to_actionstr
@@ -67,10 +67,11 @@ if __name__ == "__main__":
                 print('action: {}'.format(action))
                 sendJson(client, {'action': action, 'info': 'action'})
         elif data['info'] == 'result':
-            print('win money: {},\tyour card: {},\topp card: {},\t\tpublic card: {}'.format(
-                data['players'][position]['win_money'], data['player_card'][position],
-                data['player_card'][1 - position], data['public_card']))
+            # print('win money: {},\tyour card: {},\topp card: {},\t\tpublic card: {}'.format(
+            #     data['players'][position]['win_money'], data['player_card'][position],
+            #     data['player_card'][1 - position], data['public_card']))
             total_win_money += data['players'][position]['win_money']
+            print('win money: {}'.format(data['players'][position]['win_money']))
             print('total win money: {}'.format(total_win_money))
             lstm_state = None
             sendJson(client, {'info': 'ready', 'status': 'start'})
