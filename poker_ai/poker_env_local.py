@@ -21,19 +21,19 @@ game_number = 1000
 #     level=logging.INFO,
 #     format='%(asctime)s - %(levelname)s - %(message)s'
 # )
-# log_dir = './log'
+log_dir = './log'
 model_dir = './model'
-# os.makedirs(log_dir, exist_ok=True)
-# os.makedirs(log_dir, exist_ok=True)
-# log_path = os.path.join(log_dir, 'poker_env.log')
-# with open(log_path, 'w'):
-#     pass
+os.makedirs(log_dir, exist_ok=True)
+os.makedirs(log_dir, exist_ok=True)
+log_path = os.path.join(log_dir, 'poker_env.log')
+with open(log_path, 'w'):
+    pass
 
-# env_logger = logging.getLogger('env')
-# env_logger.setLevel(logging.INFO)
-# fh=logging.FileHandler(log_path)
-# fh.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
-# env_logger.addHandler(fh)
+env_logger = logging.getLogger('env')
+env_logger.setLevel(logging.INFO)
+fh=logging.FileHandler(log_path)
+fh.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
+env_logger.addHandler(fh)
 
 class PokerEnv(gym.Env):
     def __init__(self):
@@ -41,8 +41,8 @@ class PokerEnv(gym.Env):
         # Action Space:  0:Fold, 1:Check/Call, 2:Raise 20%, 3:Raise 40%, 4:Raise 60%, 5:Raise 80%, 6:All-In
         self.action_space = spaces.Discrete(7)
 
-        # Observation Space: 52 (private cards) + 52 (public cards) + 2 (player money) + 45 (history)
-        self.obs_shape = 151
+        # Observation Space:1 (position) +  52 (private cards) + 52 (public cards) + 2 (player money) + 45 (history)
+        self.obs_shape = 152
         self.observation_space = spaces.Box(low=0, high=1, shape=(self.obs_shape,), dtype=np.float32)
 
         # hisory obs
@@ -52,12 +52,13 @@ class PokerEnv(gym.Env):
         # Initialize clients
         self.train_client = "train_client"
         self.helper_client = "helper_client"
-        self.env = Env([self.train_client, self.helper_client])
         self.train_data = None
         self.helper_data = None
         self.episode_cnt  = 0
         self.helper_model = None
-        self.train_pos = None
+        self.train_pos = 0
+        self.helper_pos = 1 - self.train_pos
+        self.env = None
 
         self.helper_lstm_state = None
 
@@ -68,15 +69,25 @@ class PokerEnv(gym.Env):
         super().reset(seed=seed)
         # env_logger.info(f'Resetting Poker Environment, episode:{self.episode_cnt}')
         # Reset clients and data
+        self.train_pos = 1 - self.train_pos
+        self.helper_pos = 1 - self.train_pos
+        env_logger.info(f"Train position: {self.train_pos}, Helper position: {self.helper_pos}")
+        players = []
+        for i in range(NUM_PLAYERS):
+            if i == self.train_pos:
+                players.append(self.train_client)
+            else:
+                players.append(self.helper_client)
+        self.env = Env(players)
         self.env.reset()
         
         if (self.episode_cnt % OPP_UPDATA_FREQ == 0):
             # env_logger.info('Updating opponent model...')
             self.load_helper()
         
-        self.train_data = self.env.get_state(0).json()
+        self.train_data = self.env.get_state(self.train_pos).json()
         # env_logger.info(f"Train client data: {self.train_data}")
-        self.helper_data = self.env.get_state(1).json()
+        self.helper_data = self.env.get_state(self.helper_pos).json()
         obs = self._get_obs(self.train_data)
         return obs, {}
 
@@ -87,13 +98,10 @@ class PokerEnv(gym.Env):
             action(int): The action to be executed.
         """
         # helper client action
-        self.train_data = self.env.get_state(0).json()
-        self.helper_data = self.env.get_state(1).json()
+        self.train_data = self.env.get_state(self.train_pos).json()
+        self.helper_data = self.env.get_state(self.helper_pos).json()
 
         while self.helper_data['position'] == self.helper_data['action_position']:
-            self.train_pos = self.train_data['position']
-            self.helper_pos = self.helper_data['position']
-
             action_raw = self.helper_get_action(self.helper_data)
             action_parsed = IaAction.parse(action_raw)
             self.env.new_action(action_parsed)
@@ -104,8 +112,8 @@ class PokerEnv(gym.Env):
             # env_logger.info(f"Helper client action: {action_raw}")
             # sendJson(self.helper_client, {'action': action_str, 'info': 'action'})
 
-            self.train_data = self.env.get_state(0).json()
-            self.helper_data = self.env.get_state(1).json()
+            self.train_data = self.env.get_state(self.train_pos).json()
+            self.helper_data = self.env.get_state(self.helper_pos).json()
             # env_logger.info(f'Train recieved data: {self.train_data}')
 
             done = self.env.is_over()
@@ -116,7 +124,7 @@ class PokerEnv(gym.Env):
                 #     result['player_card'][0],
                 #     result['player_card'][1], 
                 #     result['public_card']))
-                # env_logger.info('Game Over, result: {}'.format(result))
+                env_logger.info('Game Over, result: {}'.format(result))
                 self.episode_cnt += 1
 
                 obs = self._get_obs(result)
@@ -124,8 +132,6 @@ class PokerEnv(gym.Env):
                 return obs, reward, done, False,{}
 
         # train client action
-        self.train_pos = self.train_data['position']
-        self.helper_pos = self.helper_data['position']
         if self.train_data['position'] == self.train_data['action_position']:
             action_raw = action_to_actionstr(action, self.train_data)
             action_parsed = IaAction.parse(action_raw)
@@ -136,8 +142,8 @@ class PokerEnv(gym.Env):
             # env_logger.info(f"game state: {self.train_data}")
             # env_logger.info(f"Train client action: {action_raw}")
 
-            self.helper_data = self.env.get_state(1).json()
-            self.train_data = self.env.get_state(0).json()
+            self.helper_data = self.env.get_state(self.helper_pos).json()
+            self.train_data = self.env.get_state(self.train_pos).json()
             # env_logger.info(f'Train recieved data: {self.train_data}')
 
             done = self.env.is_over()
@@ -145,7 +151,7 @@ class PokerEnv(gym.Env):
             reward = self._calculate_reward(self.train_data)
             if (done):
                 result = self.env.result.json()
-                # env_logger.info('Game Over, result: {}'.format(result))
+                env_logger.info('Game Over, result: {}'.format(result))
                 self.episode_cnt += 1
 
                 obs = self._get_obs(result)
@@ -166,6 +172,7 @@ class PokerEnv(gym.Env):
             return np.zeros(self.obs_shape, dtype=np.float32)
 
         # state['info] = 'state
+        position_obs = np.array([self.train_pos]  , dtype=np.float32)  # position of the agent
         private_cards_obs = get_card_coding(state['private_card']) 
         public_cards_obs = get_card_coding(state['public_card'])
         player_money_obs = np.array([p['money_left'] / INIT_MONEY for p in state['players']], dtype=np.float32)
@@ -176,6 +183,7 @@ class PokerEnv(gym.Env):
         history_obs = np.array(history_obs[-self.history_len:], dtype=np.float32).flatten()
 
         return np.concatenate([
+            position_obs,
             private_cards_obs,
             public_cards_obs,
             player_money_obs,
@@ -187,9 +195,9 @@ class PokerEnv(gym.Env):
         Calculate the reward based on the game state.
         """
         if state['info'] == 'result':
-            player_money = state['players'][0]['win_money']
+            player_money = state['players'][self.train_pos]['win_money']
             # normalize to [-1, 1]
-            reward = (player_money)/ (INIT_MONEY * NUM_PLAYERS)
+            reward = (player_money)/ INIT_MONEY
             return reward
         else:
             return 0.0

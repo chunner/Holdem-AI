@@ -2,7 +2,7 @@ from stable_baselines3 import PPO
 from stable_baselines3.common.env_util import make_vec_env
 from sb3_contrib import RecurrentPPO
 from sb3_contrib.ppo_recurrent.policies import MlpLstmPolicy
-from poker_ai.poker_env_local import PokerEnv
+from poker_ai.poker_env_6 import PokerEnv
 from stable_baselines3.common.vec_env import SubprocVecEnv
 # from stable_baselines3.common.torch_layers import RecurrentActorCriticPolicy
 from stable_baselines3.common.vec_env import DummyVecEnv
@@ -69,14 +69,14 @@ if __name__ == "__main__":
     fh = logging.FileHandler(log_path)
     fh.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
     agent_logger.addHandler(fh)
-    
-    env_fns = [lambda: PokerEnv() for _ in range(4)]  # Single environment for training
-    vec_env = SubprocVecEnv(env_fns)  # Use SubprocVecEnv for parallel environments
-    # env = DummyVecEnv([lambda: PokerEnv()])
+
+    # env_fns = [lambda: PokerEnv() for _ in range(4)]  # Single environment for training
+    # vec_env = SubprocVecEnv(env_fns)  # Use SubprocVecEnv for parallel environments
+    env = DummyVecEnv([lambda: PokerEnv()])
 
     model = RecurrentPPO(
         policy=MlpLstmPolicy,  # Use MLP with LSTM policy
-        env=vec_env,
+        env=env,
         n_steps=2048,
         batch_size=64,
         learning_rate=3e-4,
@@ -89,6 +89,6 @@ if __name__ == "__main__":
         verbose=1,
         tensorboard_log=os.path.join(log_dir, 'tensorboard'),
     )
-    log_callback = LogCallback(total_steps=10_000_000, model=model)
-    model.learn(total_timesteps=10_000_000, callback=log_callback)
+    log_callback = LogCallback(total_steps=1_000_000, model=model)
+    model.learn(total_timesteps=1_000_000, callback=log_callback)
     model.save(os.path.join(model_dir, "ppo_poker_final.zip"))
