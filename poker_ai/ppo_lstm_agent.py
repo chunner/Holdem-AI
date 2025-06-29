@@ -1,8 +1,7 @@
-from stable_baselines3 import PPO
 from stable_baselines3.common.env_util import make_vec_env
 from sb3_contrib import RecurrentPPO
 from sb3_contrib.ppo_recurrent.policies import MlpLstmPolicy
-from poker_ai.poker_env_6 import PokerEnv
+from poker_ai.poker_env_local import PokerEnv
 from stable_baselines3.common.vec_env import SubprocVecEnv
 # from stable_baselines3.common.torch_layers import RecurrentActorCriticPolicy
 from stable_baselines3.common.vec_env import DummyVecEnv

@@ -47,7 +47,7 @@ class PokerEnv(gym.Env):
 
         # Initialize clients
         self.train_client = "train_client"
-        self.helper_clients = [None] * NUM_HELPERS
+        self.helper_clients = ["helper_client_" + str(i) for i in range(NUM_HELPERS)]
         self.train_pos = 0
         self.helper_pos = list(range(1, NUM_PLAYERS))
         self.players = [self.train_client] + self.helper_clients
@@ -65,9 +65,9 @@ class PokerEnv(gym.Env):
         """
         super().reset(seed=seed)
         env_logger.info("Resetting environment for a new episode.")
-        self.train_pos = (1 + self.episode_cnt) % NUM_PLAYERS
+        self.train_pos = (1 + self.train_pos) % NUM_PLAYERS
         for i in range(NUM_HELPERS):
-            self.helper_pos[i] = (self.train_pos + i) % NUM_PLAYERS
+            self.helper_pos[i] = (self.helper_pos[i]+ 1) % NUM_PLAYERS
         self.players.insert(0, self.players.pop())
         env_logger.info(f"Training position: {self.train_pos}, Helper positions: {self.helper_pos}")
         env_logger.info(f"Players: {self.players}")
