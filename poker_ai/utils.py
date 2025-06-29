@@ -48,7 +48,7 @@ def recvJson(request):
 def action_to_actionstr(action, state):
     """
     Args:
-        action (int): Action index (0: fold, 1: check/call, 2: raise small, 3: raise big, 4: all-in)
+        action (int): Action index (0:Fold, 1:Check/Call, 2:Raise 20%, 3:Raise 40%, 4:Raise 60%, 5:Raise 80%, 6:All-In)
         state (dict): Current game state containing legal actions and raise range
     Returns:
         str: Action string representation
@@ -58,33 +58,53 @@ def action_to_actionstr(action, state):
     legal = state['legal_actions']
     raise_range = state['raise_range']
     # 默认值
-    action_type = action
     amount = 0
     if action == 0:
         action_str = 'fold'
     elif action == 1:
         action_str = 'check' if 'check' in legal else 'call'
+    # elif action == 2:
+    #     if 'raise' not in legal or money_left == 0:
+    #         action_type = 1
+    #         action_str = 'check' if 'check' in legal else 'call'
+    #     else:
+    #         amount = min(raise_range[0] * 1.5, raise_range[1])
+    #         action_str = 'r' + str(int(amount))
+    # elif action == 3:
+    #     if 'raise' not in legal or money_left == 0:
+    #         action_type = 1
+    #         action_str = 'check' if 'check' in legal else 'call'
+    #     else:
+    #         amount = min(raise_range[0] * 2, raise_range[1])
+    #         action_str = 'r' + str(int(amount))
+    # elif action == 4:
+    #     if 'raise' not in legal or money_left == 0:
+    #         action_type = 1
+    #         action_str = 'check' if 'check' in legal else 'call'
+    #     else:
+    #         amount = raise_range[1]
+    #         action_str = 'r' + str(int(amount))
+    elif 'raise' not in legal or money_left == 0:
+        action_str = 'check' if 'check' in legal else 'call'
     elif action == 2:
-        if 'raise' not in legal or money_left == 0:
-            action_type = 1
-            action_str = 'check' if 'check' in legal else 'call'
-        else:
-            amount = min(raise_range[0] * 1.5, raise_range[1])
-            action_str = 'r' + str(int(amount))
+        raise_span = raise_range[1] - raise_range[0]
+        amount = int(raise_range[0] + raise_span * 0.2)
+        action_str = 'r' + str(amount)
     elif action == 3:
-        if 'raise' not in legal or money_left == 0:
-            action_type = 1
-            action_str = 'check' if 'check' in legal else 'call'
-        else:
-            amount = min(raise_range[0] * 2, raise_range[1])
-            action_str = 'r' + str(int(amount))
+        raise_span = raise_range[1] - raise_range[0]
+        amount = int(raise_range[0] + raise_span * 0.4)
+        action_str = 'r' + str(amount)
     elif action == 4:
-        if 'raise' not in legal or money_left == 0:
-            action_type = 1
-            action_str = 'check' if 'check' in legal else 'call'
-        else:
-            amount = raise_range[1]
-            action_str = 'r' + str(int(amount))
+        raise_span = raise_range[1] - raise_range[0]
+        amount = int(raise_range[0] + raise_span * 0.6)
+        action_str = 'r' + str(amount)
+    elif action == 5:
+        raise_span = raise_range[1] - raise_range[0]
+        amount = int(raise_range[0] + raise_span * 0.8)
+        action_str = 'r' + str(amount)
+    elif action == 6:
+        amount = raise_range[1]
+        action_str = 'r' + str(amount)
     else:
         raise ValueError(f"Unknown action: {action}")
     return action_str

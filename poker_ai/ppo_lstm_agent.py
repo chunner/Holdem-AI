@@ -85,6 +85,6 @@ model = RecurrentPPO(
     verbose=1,
     tensorboard_log=os.path.join(log_dir, 'tensorboard'),
 )
-log_callback = LogCallback(total_steps=1_000_000, model=model)
-model.learn(total_timesteps=1_000_000, callback=log_callback)
+log_callback = LogCallback(total_steps=10_000_000, model=model)
+model.learn(total_timesteps=10_000_000, callback=log_callback)
 model.save(os.path.join(model_dir, "ppo_poker_final.zip"))

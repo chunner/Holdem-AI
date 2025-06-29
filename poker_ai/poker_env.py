@@ -38,8 +38,8 @@ env_logger.addHandler(fh)
 class PokerEnv(gym.Env):
     def __init__(self):
         super(PokerEnv, self).__init__()
-        # Action Space: 0: Fold, 1: Check/Call, 2: Raise 50% Pot, 3: Raise 100% Pot, 4: All In
-        self.action_space = spaces.Discrete(5)
+        # Action Space:  0:Fold, 1:Check/Call, 2:Raise 20%, 3:Raise 40%, 4:Raise 60%, 5:Raise 80%, 6:All-In
+        self.action_space = spaces.Discrete(7)
 
         # Observation Space: 52 (private cards) + 52 (public cards) + 2 (player money) + 45 (history)
         self.obs_shape = 151
@@ -123,6 +123,7 @@ class PokerEnv(gym.Env):
         self.helper_pos = self.helper_data['position']
         if self.train_data['position'] == self.train_data['action_position']:
             action_str = action_to_actionstr(action, self.train_data)
+            env_logger.info(f"game state: {self.train_data}")
             env_logger.info(f"Train client action: {action_str}")
             sendJson(self.train_client, {'action': action_str, 'info': 'action'})
 
@@ -220,8 +221,8 @@ class PokerEnv(gym.Env):
         import glob
         import random
         model_files = glob.glob(os.path.join(model_dir, 'ppo_poker_*.zip'))
+        model_files = sorted(model_files, key=os.path.getctime)[-10:]
         if (model_files):
-            # latest_model = max(model_files, key=os.path.getctime)
             latest_model = random.choice(model_files)
             env_logger.info(f"Loading helper model from {latest_model}")
             self.helper_model = RecurrentPPO.load(latest_model, env=self)
@@ -272,3 +273,26 @@ class PokerEnv(gym.Env):
                     self.record_history(2, amount, item['position'])
                 if (self.history_len == len(self.history_action)):
                     return
+
+import json
+
+def update_model_pool(model_path, winrate, pool_path='model_pool.json', top_n=10):
+    """
+    Update the model pool with the new model.
+    Args:
+        model_path (str): Path to the new model.
+        winrate (float): Win rate of the new model.
+        pool_path (str): Path to the model pool file.
+        top_n (int): Number of top models to keep in the pool.
+    """
+    if os.path.exists(pool_path):
+        with open(pool_path, 'r') as f:
+            model_pool = json.load(f)
+    else:
+        model_pool = []
+
+    model_pool.append({'model_path': model_path, 'winrate': winrate})
+    model_pool = sorted(model_pool, key=lambda x: x['winrate'], reverse=True)[:top_n]
+
+    with open(pool_path, 'w') as f:
+        json.dump(model_pool, f, indent=4)
