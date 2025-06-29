@@ -10,9 +10,9 @@ name = sys.argv[2]                      # 当前程序的 AI 名字
 game_number = int(sys.argv[3])          # 最大对局数量
 
 
-model_path = './poker_ai/model/ppo_poker_final.zip'
+model_path = './ppo_poker_final1.zip' if room_number == 2 else './poker_ai/model/ppo_poker_6_final.zip'
 from sb3_contrib import RecurrentPPO
-from poker_ai.poker_env import PokerEnv
+from poker_ai.poker_env_local import PokerEnv
 from poker_ai.utils import action_to_actionstr
 
 print("Loading model from:", model_path)
@@ -23,6 +23,7 @@ print("Environment initialized.")
 
 lstm_state = None
 def get_action(data):
+    global lstm_state
     obs = env._get_obs(data)
     action, lstm_state = model.predict(obs, state=lstm_state, deterministic=True)
     return action_to_actionstr(action, data)
@@ -45,7 +46,7 @@ def recvJson(request):
     data = json.loads(data)
     return data
 
-
+total_win_money = 0
 if __name__ == "__main__":
     client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     client.connect((server_ip, server_port))
@@ -69,6 +70,8 @@ if __name__ == "__main__":
             print('win money: {},\tyour card: {},\topp card: {},\t\tpublic card: {}'.format(
                 data['players'][position]['win_money'], data['player_card'][position],
                 data['player_card'][1 - position], data['public_card']))
+            total_win_money += data['players'][position]['win_money']
+            print('total win money: {}'.format(total_win_money))
             lstm_state = None
             sendJson(client, {'info': 'ready', 'status': 'start'})
         else:

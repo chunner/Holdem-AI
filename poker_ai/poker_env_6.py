@@ -8,10 +8,11 @@ import os
 from sb3_contrib import RecurrentPPO
 from poker.ia.env import Env
 from poker.ia.action import IaAction
+from poker_ai.strategy import PokerStrategy
 NUM_PLAYERS = 6
 NUM_HELPERS = NUM_PLAYERS - 1  # Number of helper agents
-INIT_MONEY = 1000
-OPP_UPDATE_FREQ = 500
+INIT_MONEY = 20000
+OPP_UPDATE_FREQ = 1000
 
 
 
@@ -34,16 +35,16 @@ env_logger.addHandler(fh)
 class PokerEnv(gym.Env):
     def __init__(self):
         super(PokerEnv, self).__init__()
-        # Action Space: 0: Fold, 1: Check/Call, 2: Raise 50% Pot, 3: Raise 100% Pot, 4: All In
-        self.action_space = spaces.Discrete(5)
-
-        # Observation Space:1(position) +  52 (private cards) + 52 (public cards) + 6 (player money) + 6 * 5 * 4 (history)
-        self.obs_shape = 1 + 52 + 52 + NUM_PLAYERS + NUM_PLAYERS * 5 * 4
-        self.observation_space = spaces.Box(low=0, high=1, shape=(self.obs_shape,), dtype=np.float32)
+         # Action Space:  0:Fold, 1:Check/Call, 2:Raise 20%, 3:Raise 40%, 4:Raise 60%, 5:Raise 80%, 6:All-In
+        self.action_space = spaces.Discrete(7)
 
         # hisory obs
         self.history_len = NUM_PLAYERS * 4 # 4 actions per player
         self.history_action = []
+        # Observation Space:1(position) +  52 (private cards) + 52 (public cards) + 6 (player money) + 6 * 5 * 4 (history)
+        self.obs_shape = 1 + 52 + 52 + NUM_PLAYERS + self.history_len * 5
+        self.observation_space = spaces.Box(low=0, high=1, shape=(self.obs_shape,), dtype=np.float32)
+
 
         # Initialize clients
         self.train_client = "train_client"
@@ -147,6 +148,8 @@ class PokerEnv(gym.Env):
         if state['info'] == 'result':
             win_money = state['players'][self.train_pos]['win_money']
             reward = win_money / INIT_MONEY  # Normalize reward based on initial money
+            env_logger.info(f"Reward for agent at position {self.train_pos}: {reward}")
+            env_logger.info(f"Game result: {state}")
             return reward
         else:
             return 0.0
@@ -181,7 +184,27 @@ class PokerEnv(gym.Env):
         idx = action_pos if action_pos < self.train_pos else action_pos - 1
         model = self.helper_models[idx]
         if model is None:
-            return get_action(data)  # Fallback to default action if no model is loaded
+            # return get_action(data)  # Fallback to default action if no model is loaded
+            strategy = PokerStrategy()
+            players_info = []
+            for p in data['players']:
+                # 计算贡献值 = 初始筹码 - 剩余筹码
+                contribution = p['total_money'] - p['money_left']
+                players_info.append({
+                    'position': p['position'],
+                    'money_left': p['money_left'],
+                    'contribution': contribution
+                })
+            # 只允许访问Agent应该看到的信息
+            allowed_data = {
+                'position': data['position'],
+                'legal_actions': data['legal_actions'],
+                'private_card': data['private_card'],
+                'public_card': data['public_card'],
+                'players': players_info,
+                'raise_range': data.get('raise_range', [])
+            }
+            return strategy.decide_action(allowed_data)
         else:
             obs = self._get_obs(data)
             action, self.helper_lstm_states[idx] = model.predict(obs, state=self.helper_lstm_states[idx], deterministic=True)

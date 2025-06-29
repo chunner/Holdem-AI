@@ -8,10 +8,11 @@ import os
 from sb3_contrib import RecurrentPPO
 from poker.ia.env import Env
 from poker.ia.action import IaAction
+from poker_ai.strategy import PokerStrategy
 
 NUM_PLAYERS = 2
 INIT_MONEY = 20000
-OPP_UPDATA_FREQ = 500 # episode  
+OPP_UPDATA_FREQ = 5000 # episode  
 
 room_number = NUM_PLAYERS
 game_number = 1000
@@ -223,7 +224,28 @@ class PokerEnv(gym.Env):
         Get the action from the helper model.
         """
         if (self.helper_model is None):
-            return get_action(state)
+            # return get_action(state)
+            strategy = PokerStrategy()
+            players_info = []
+            for p in state['players']:
+                # 计算贡献值 = 初始筹码 - 剩余筹码
+                contribution = p['total_money'] - p['money_left']
+                players_info.append({
+                    'position': p['position'],
+                    'money_left': p['money_left'],
+                    'contribution': contribution
+                })
+            # 只允许访问Agent应该看到的信息
+            allowed_data = {
+                'position': state['position'],
+                'legal_actions': state['legal_actions'],
+                'private_card': state['private_card'],
+                'public_card': state['public_card'],
+                'players': players_info,
+                'raise_range': state.get('raise_range', [])
+            }
+            return strategy.decide_action(allowed_data)
+
         else:
             obs = self._get_obs(state)
             action, self.helper_lstm_state = self.helper_model.predict(obs, state=self.helper_lstm_state, deterministic=True)
