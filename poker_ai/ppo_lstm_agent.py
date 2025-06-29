@@ -2,7 +2,8 @@ from stable_baselines3 import PPO
 from stable_baselines3.common.env_util import make_vec_env
 from sb3_contrib import RecurrentPPO
 from sb3_contrib.ppo_recurrent.policies import MlpLstmPolicy
-from poker_ai.poker_env import PokerEnv
+from poker_ai.poker_env_local import PokerEnv
+from stable_baselines3.common.vec_env import SubprocVecEnv
 # from stable_baselines3.common.torch_layers import RecurrentActorCriticPolicy
 from stable_baselines3.common.vec_env import DummyVecEnv
 from stable_baselines3.common.callbacks import BaseCallback
@@ -12,31 +13,7 @@ import os
 import shutil
 
 import torch
-print(f"CUDA available: {torch.cuda.is_available()}")
-print(f"Device: {torch.cuda.get_device_name(0) if torch.cuda.is_available() else 'CPU'}")
 
-# configure logging
-# logging.basicConfig(
-#     filename='train.log', 
-#     level=logging.INFO, 
-#     format='%(asctime)s - %(levelname)s - %(message)s'
-# )
-log_dir = './log'
-model_dir = './model'
-os.makedirs(log_dir, exist_ok=True)
-if os.path.exists(model_dir):
-    shutil.rmtree(model_dir)
-os.makedirs(model_dir, exist_ok=True)
-log_path = os.path.join(log_dir, 'train.log')
-with open(log_path, 'w') :
-    pass
-
-
-agent_logger = logging.getLogger("agent")
-agent_logger.setLevel(logging.INFO)
-fh = logging.FileHandler(log_path)
-fh.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
-agent_logger.addHandler(fh)
 
 class LogCallback(BaseCallback):
     def __init__(self, total_steps, model,verbose=0):
@@ -66,25 +43,52 @@ class LogCallback(BaseCallback):
 
         return True
 
+if __name__ == "__main__":
+    print(f"CUDA available: {torch.cuda.is_available()}")
+    print(f"Device: {torch.cuda.get_device_name(0) if torch.cuda.is_available() else 'CPU'}")
+
+    # configure logging
+    # logging.basicConfig(
+    #     filename='train.log', 
+    #     level=logging.INFO, 
+    #     format='%(asctime)s - %(levelname)s - %(message)s'
+    # )
+    log_dir = './log'
+    model_dir = './model'
+    os.makedirs(log_dir, exist_ok=True)
+    if os.path.exists(model_dir):
+        shutil.rmtree(model_dir)
+    os.makedirs(model_dir, exist_ok=True)
+    log_path = os.path.join(log_dir, 'train.log')
+    with open(log_path, 'w') :
+        pass
 
 
-env = DummyVecEnv([lambda: PokerEnv()])
+    agent_logger = logging.getLogger("agent")
+    agent_logger.setLevel(logging.INFO)
+    fh = logging.FileHandler(log_path)
+    fh.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
+    agent_logger.addHandler(fh)
+    
+    env_fns = [lambda: PokerEnv() for _ in range(4)]  # Single environment for training
+    vec_env = SubprocVecEnv(env_fns)  # Use SubprocVecEnv for parallel environments
+    # env = DummyVecEnv([lambda: PokerEnv()])
 
-model = RecurrentPPO(
-    policy=MlpLstmPolicy,  # Use MLP with LSTM policy
-    env=env,
-    n_steps=2048,
-    batch_size=64,
-    learning_rate=3e-4,
-    policy_kwargs=dict(
-        net_arch=dict(pi=[128, 128], vf=[128, 128]),  # MLP architecture
-        lstm_hidden_size=128,  # LSTM hidden size
-        enable_critic_lstm=True,  # Enable critical state for LSTM
-        shared_lstm=False,
-    ),
-    verbose=1,
-    tensorboard_log=os.path.join(log_dir, 'tensorboard'),
-)
-log_callback = LogCallback(total_steps=10_000_000, model=model)
-model.learn(total_timesteps=10_000_000, callback=log_callback)
-model.save(os.path.join(model_dir, "ppo_poker_final.zip"))
+    model = RecurrentPPO(
+        policy=MlpLstmPolicy,  # Use MLP with LSTM policy
+        env=vec_env,
+        n_steps=2048,
+        batch_size=64,
+        learning_rate=3e-4,
+        policy_kwargs=dict(
+            net_arch=dict(pi=[128, 128], vf=[128, 128]),  # MLP architecture
+            lstm_hidden_size=128,  # LSTM hidden size
+            enable_critic_lstm=True,  # Enable critical state for LSTM
+            shared_lstm=False,
+        ),
+        verbose=1,
+        tensorboard_log=os.path.join(log_dir, 'tensorboard'),
+    )
+    log_callback = LogCallback(total_steps=10_000_000, model=model)
+    model.learn(total_timesteps=10_000_000, callback=log_callback)
+    model.save(os.path.join(model_dir, "ppo_poker_final.zip"))
